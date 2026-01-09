@@ -1,37 +1,115 @@
 :host {
   font-family: sans-serif;
+  display: inline-block;
+}
+
+::ng-deep {
+  .dropdown-backdrop {
+    background: transparent;
+  }
 }
 
 .dropdown {
-  position: relative;
   width: 240px;
-}
 
-.dropdown-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 12px;
-  border: 1px solid #ccc;
-  background: #fff;
-  cursor: pointer;
-}
+  &-trigger {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 
-.dropdown-panel {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  border: 1px solid #ccc;
-  background: #fff;
-  z-index: 100;
-}
+    padding: 8px 12px;
+    border: 1px solid #ccc;
+    background: #fff;
+    cursor: pointer;
 
-.dropdown-item {
-  padding: 8px 12px;
-  cursor: pointer;
+    border-radius: 0;
+    outline: none;
 
-  &:hover {
-    background: #f5f5f5;
+    transition:
+      background-color 120ms ease,
+      border-color 120ms ease,
+      box-shadow 120ms ease;
+
+    &:hover {
+      background-color: #f5f5f5;
+    }
+
+    &.is-open {
+      border-color: #999;
+      box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.08);
+    }
+
+    &__text {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    &__arrow {
+      display: flex;
+      align-items: center;
+      transition: transform 150ms ease;
+      transform-origin: center;
+
+      &.is-open {
+        transform: rotate(180deg);
+      }
+    }
+  }
+
+  &-panel {
+    border: 1px solid #ccc;
+    background: #fff;
+    z-index: 100;
+
+    max-height: 240px;
+    overflow: auto;
+  }
+
+  &-option {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+
+    padding: 8px 12px;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    text-align: left;
+
+    transition: background-color 120ms ease;
+
+    &:hover:not(:disabled) {
+      background: #f5f5f5;
+    }
+
+    &:disabled {
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+
+    &.is-selected {
+      background-color: #eeeeee;
+
+      &:hover:not(:disabled) {
+        background-color: #e6e6e6;
+      }
+    }
+
+    &__check {
+      display: flex;
+      align-items: center;
+      margin-left: 8px;
+      color: currentColor;
+    }
+  }
+
+  &-icon {
+    display: block;
+    width: 1em;
+    height: 1em;
+    fill: currentColor;
   }
 }
