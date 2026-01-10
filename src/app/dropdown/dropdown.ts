@@ -2,6 +2,8 @@ import { afterRenderEffect, ChangeDetectionStrategy, Component, computed, Elemen
 import { CommonModule } from '@angular/common';
 import { OverlayModule } from '@angular/cdk/overlay';
 
+export type DropdownMode = 'single' | 'multi';
+
 export type DropdownItem = {
   label: string;
   value: string;
@@ -16,42 +18,82 @@ export type DropdownItem = {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Dropdown {
-  @Input({ required: true }) items: DropdownItem[] = [];
+  @Input() items: DropdownItem[] = [];
   @Input() placeholder = 'Выберите элемент';
+  @Input() mode: DropdownMode = 'single';
 
-  /** Single-select: отдаём выбранный item или null при снятии выбора. */
-  @Output() readonly change = new EventEmitter<DropdownItem | null>();
+  /** 
+   * Single-select: эмитим [value] или []
+   * Multi-select: эмитим [value1, value2...]
+   * */
+  @Output() readonly change = new EventEmitter<string[]>();
 
   /** Ссылки на элементы списка — нужны только для scrollIntoView при открытии. */
   readonly optionEls = viewChildren<ElementRef<HTMLElement>>('optionEl');
 
   readonly isOpen = signal(false);
   readonly selectedValue = signal<string | null>(null);
+  readonly selectedSet = signal<Set<string>>(new Set<string>());
+
+  readonly isMulti = computed(() => this.mode === 'multi');
+
+  readonly selectedValues = computed<string[]>(() => {
+    if (this.isMulti()) {
+      const set = this.selectedSet();
+      return this.items.filter(i => set.has(i.value)).map(i => i.value);
+    }
+
+    const v = this.selectedValue();
+    return v ? [v] : [];
+  });
+
+  readonly selectedValuesSet = computed(() => new Set(this.selectedValues()));
+
+  readonly selectedItems = computed<DropdownItem[]>(() => {
+    const values = new Set(this.selectedValues());
+    return this.items.filter(i => values.has(i.value));
+  });
+
+  readonly displayValue = computed(() => {
+    const selected = this.selectedItems();
+    if (!selected.length) return this.placeholder;
+
+    if (!this.isMulti()) {
+      return selected[0]?.label ?? this.placeholder;
+    }
+
+    if (selected.length <= 2) {
+      return selected.map(i => i.label).join(', ');
+    }
+    return `${selected[0].label}, ${selected[1].label} и еще ${selected.length - 2}`;
+  });
 
   /** Флаг: скроллим до выбранного элемента один раз при открытии. */
   private readonly shouldScrollToSelected = signal(false);
-
-  readonly selectedItem = computed<DropdownItem | null>(() => {
-    const value = this.selectedValue();
-    return value ? this.items.find((i) => i.value === value) ?? null : null;
-  });
-
-  readonly displayValue = computed(() => this.selectedItem()?.label ?? this.placeholder);
 
   constructor() {
     // Реализуем скролл до выбранного элемента если он есть
     afterRenderEffect(() => {
       if (!this.isOpen() || !this.shouldScrollToSelected()) return;
-      if (!this.selectedValue()) {
+
+      // для single — скроллим к выбранному
+      // для multi — можно скроллить к первому выбранному (минимальный вариант)
+      const values = this.selectedValues();
+      const first = values[0];
+
+      if (!first) {
         this.shouldScrollToSelected.set(false);
         return;
       }
 
-      const selectedElRef = this.optionEls().find(
-        (ref) => ref.nativeElement.getAttribute('aria-selected') === 'true'
-      );
+      const options = this.optionEls();
+      if (!options.length) {
+        return;
+      }
 
-      selectedElRef?.nativeElement.scrollIntoView({ block: 'nearest' });
+      const el = options.find(ref => ref.nativeElement.getAttribute('data-value') === first);
+      el?.nativeElement.scrollIntoView({ block: 'nearest' });
+
       this.shouldScrollToSelected.set(false);
     });
   }
@@ -70,34 +112,43 @@ export class Dropdown {
     this.shouldScrollToSelected.set(false);
   }
 
-  // При повторном выборе элемента снимаем выбор
   select(item: DropdownItem): void {
     if (item.disabled) return;
 
-    const isSame = this.selectedValue() === item.value;
+    if (this.isMulti()) {
+      const next = new Set(this.selectedSet());
 
-    this.selectedValue.set(isSame ? null : item.value);
-    this.change.emit(isSame ? null : item);
+      if (next.has(item.value)) {
+        next.delete(item.value);
+      } else {
+        next.add(item.value);
+      }
 
+      this.selectedSet.set(next);
+
+      this.change.emit(this.selectedValues());
+
+      return;
+    }
+
+    // Single-select: повторный клик по выбранному снимает выбор
+    const isAlreadySelected = this.selectedValue() === item.value;
+    this.selectedValue.set(isAlreadySelected ? null : item.value);
+
+    this.change.emit(this.selectedValues());
     this.close();
   }
 
   // Реализуем поддержку клавиатуры
   onTriggerKeydown(event: KeyboardEvent): void {
-    switch (event.key) {
-      case 'Enter':
-      case ' ':
-        event.preventDefault();
-        this.toggle();
-        break;
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      this.toggle();
+    }
 
-      case 'Escape':
-        event.preventDefault();
-        this.close();
-        break;
-
-      default:
-        break;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      this.close();
     }
   }
 }

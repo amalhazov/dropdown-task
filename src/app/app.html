@@ -1,5 +1,6 @@
-<dropdown (change)="selectedItem = $event" [items]="items" />
+<dropdown (change)="selectedValues.set($event)" [items]="items" mode="multi"/>
+<!-- <dropdown (change)="selectedValues.set($event)" [items]="items" mode="single"/> -->
 
 <hr />
 
-{{ selectedItem | json }}
+{{ selectedDistricts() | json }}

@@ -1,4 +1,4 @@
-import { Component, signal } from '@angular/core';
+import { Component, computed, signal } from '@angular/core';
 import { Dropdown } from './dropdown/dropdown';
 import { JsonPipe } from '@angular/common';
 import { districts } from './data';
@@ -10,7 +10,11 @@ import { districts } from './data';
   styleUrl: './app.scss',
 })
 export class App {
-  selectedItem: any = null;
-
   readonly items = districts;
+
+  readonly selectedValues = signal<string[]>([]);
+
+  readonly selectedDistricts = computed(() =>
+    this.items.filter(d => this.selectedValues().includes(d.value))
+  );
 }

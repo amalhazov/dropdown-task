@@ -39,15 +39,16 @@
   >
     <div id="dropdown-panel" class="dropdown-panel" role="listbox">
       @for (item of items; track item.value) {
-        @let isSelected = selectedValue() === item.value;
+        @let isSelected = selectedValuesSet().has(item.value);
         <button
           #optionEl
           type="button"
           class="dropdown-option"
           role="option"
-          [disabled]="item.disabled ?? false"
           [class.is-selected]="isSelected"
           [attr.aria-selected]="isSelected"
+          [attr.data-value]="item.value"
+          [disabled]="item.disabled ?? false"
           (click)="select(item)"
         >
           <span class="dropdown-option__text">{{ item.label }}</span>
