@@ -4,11 +4,21 @@ import { OverlayModule } from '@angular/cdk/overlay';
 
 export type DropdownMode = 'single' | 'multi';
 
+export type DropdownGroup = {
+  key: string;
+  label: string;
+  disabled?: boolean;
+}
+
 export type DropdownItem = {
   label: string;
   value: string;
   disabled?: boolean;
 }
+
+type RenderRow = 
+  | { kind: 'group'; key: string; label: string; disabled: boolean }
+  | { kind: 'option'; item: DropdownItem; disabled: boolean; groupKey: string | null };
 
 @Component({
   selector: 'dropdown',
@@ -21,6 +31,8 @@ export class Dropdown {
   @Input() items: DropdownItem[] = [];
   @Input() placeholder = 'Выберите элемент';
   @Input() mode: DropdownMode = 'single';
+  @Input() groups: DropdownGroup[] = [];
+  @Input() groupBy?: (item: DropdownItem) => string | null;
 
   /** 
    * Single-select: эмитим [value] или []
@@ -68,6 +80,95 @@ export class Dropdown {
     return `${selected[0].label}, ${selected[1].label} и еще ${selected.length - 2}`;
   });
 
+  readonly groupsMap = computed(() => {
+    const map = new Map<string, DropdownGroup>();
+    for (const g of this.groups) map.set(g.key, g);
+    return map;
+  });
+
+  readonly renderRows = computed<RenderRow[]>(() => {
+    const items = this.items ?? [];
+    const groupBy = this.groupBy;
+
+    // Без группировки — ведем себя как раньше, просто список опций
+    if (!groupBy) {
+      return items.map(item => ({
+        kind: 'option',
+        item,
+        disabled: !!item.disabled,
+        groupKey: null,
+      }));
+    }
+
+    const grouped = new Map<string, DropdownItem[]>();
+
+    for (const item of items) {
+      const key = groupBy(item);
+      if (!key) continue;
+
+      const arr = grouped.get(key);
+      if (arr) {
+        arr.push(item);
+      } else {
+        grouped.set(key, [item]);
+      }
+    }
+
+    const groupsMap = this.groupsMap();
+    const rows: RenderRow[] = [];
+
+    // 1) Сначала ключи из groups — чтобы порядок был контролируемый
+    const orderedKeys = (this.groups ?? [])
+      .map(g => g.key)
+      .filter(key => grouped.has(key));
+
+    // 2) Потом “лишние” ключи, которых нет в groups (на всякий случай)
+    const extraKeys: string[] = [];
+    for (const key of grouped.keys()) {
+      if (!groupsMap.has(key)) extraKeys.push(key);
+    }
+
+    const allKeys = [...orderedKeys, ...extraKeys];
+
+    for (const key of allKeys) {
+      const groupItems = grouped.get(key);
+      if (!groupItems?.length) continue; // группа показывается только если есть элементы
+
+      const group = groupsMap.get(key);
+
+      // ✅ ВОТ ТУТ мы “дизейблим всю группу”
+      const groupDisabled = !!group?.disabled;
+
+      // header группы (не выбираемый)
+      rows.push({
+        kind: 'group',
+        key,
+        label: group?.label ?? key,
+        disabled: groupDisabled,
+      });
+
+      // элементы группы (все disabled, если disabled группа)
+      for (const item of groupItems) {
+        rows.push({
+          kind: 'option',
+          item,
+
+          // ✅ ВОТ ЭТА СТРОКА — главное исправление по ТЗ:
+          // если disabled группа — все её элементы disabled
+          disabled: groupDisabled || !!item.disabled,
+
+          groupKey: key,
+        });
+      }
+    }
+
+    return rows;
+  });
+
+  trackRow(row: RenderRow): string {
+    return row.kind === 'group' ? `g:${row.key}` : `o:${row.item.value}`;
+  }
+
   /** Флаг: скроллим до выбранного элемента один раз при открытии. */
   private readonly shouldScrollToSelected = signal(false);
 
@@ -112,8 +213,10 @@ export class Dropdown {
     this.shouldScrollToSelected.set(false);
   }
 
-  select(item: DropdownItem): void {
-    if (item.disabled) return;
+  select(row: { kind: 'option'; item: DropdownItem; disabled: boolean }): void {
+    if (row.disabled) return;
+
+    const item = row.item;
 
     if (this.isMulti()) {
       const next = new Set(this.selectedSet());
@@ -125,9 +228,7 @@ export class Dropdown {
       }
 
       this.selectedSet.set(next);
-
       this.change.emit(this.selectedValues());
-
       return;
     }
 

@@ -58,6 +58,20 @@
     }
   }
 
+  &-group {
+    padding: 8px 12px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    color: #666;
+    background: #fafafa;
+    border-top: 1px solid #eee;
+
+    &.is-disabled {
+      opacity: 0.6;
+    }
+  }
+
   &-panel {
     border: 1px solid #ccc;
     background: #fff;
