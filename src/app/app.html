@@ -1,12 +1,30 @@
-<dropdown
-  [items]="items"
-  [groups]="groups"
-  [groupBy]="groupBy"
-  [searchable]=true
-  mode="single"
-  (change)="selectedValues.set($event)"
-/>
+<h1 class="page-title">Выбор районов Москвы</h1>
+
+<section class="page-section">
+  <h2 class="page-section__title">Список округов Москвы</h2>
+
+  <dropdown
+    mode="multi"
+    [items]="districtItems"
+    [value]="selectedDistricts()"
+    (change)="selectedDistricts.set($event)"
+  />
+</section>
+
+<section class="page-section">
+  <h2 class="page-section__title">Список районов Москвы</h2>
+
+  <dropdown
+    mode="multi"
+    [items]="areaItems"
+    [groups]="groupsForAreas()"
+    [groupBy]="groupByDistrict"
+    [searchable]="true"
+    [value]="selectedAreas()"
+    (change)="selectedAreas.set($event)"
+  />
+</section>
 
 <hr />
 
-{{ selectedDistricts() | json }}
+<pre class="dropdown-output"><code>{{ selectedAreaObjects() | json }}</code></pre>

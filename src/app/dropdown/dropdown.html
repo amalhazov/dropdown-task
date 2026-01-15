@@ -8,23 +8,22 @@
     aria-haspopup="listbox"
     [class.is-open]="isOpen()"
     [attr.aria-expanded]="isOpen()"
-    [attr.aria-controls]="'dropdown-panel'"
+    [attr.aria-controls]="panelId"
     (click)="toggle()"
   >
-    <span class="dropdown-trigger__text">{{ displayValue() }}</span>
-    <span
-      class="dropdown-trigger__arrow"
-      [class.is-open]="isOpen()"
-    >
+    <span class="dropdown-trigger__text" [title]="displayValue()">
+      {{ displayValue() }}
+    </span>
+
+    <span class="dropdown-trigger__arrow" [class.is-open]="isOpen()">
       <svg
         class="dropdown-icon dropdown-icon--chevron"
         viewBox="0 0 24 24"
         aria-hidden="true"
       >
         <path d="M7 10l5 5 5-5z" />
-  </svg>
-</span>
-
+      </svg>
+    </span>
   </button>
 
   <ng-template
@@ -36,8 +35,16 @@
     [cdkConnectedOverlayWidth]="originEl.offsetWidth"
     (backdropClick)="close()"
   >
-    <div id="dropdown-panel" class="dropdown-panel" role="listbox">
-      @if (searchable) {
+    <!-- Кэшируем rows чтобы не вызывать computed несколько раз -->
+    @let rows = renderRows();
+
+    <div
+      [id]="panelId"
+      class="dropdown-panel"
+      role="listbox"
+      [attr.aria-multiselectable]="isMulti() ? 'true' : null"
+    >
+      @if (searchable()) {
         <div class="dropdown-search">
           <input
             #searchInput
@@ -50,21 +57,20 @@
         </div>
       }
 
-      @if (renderRows().length === 0) {
+      @if (rows.length === 0) {
         <div class="dropdown-empty">Ничего не найдено</div>
       } @else {
-        @for (row of renderRows(); track trackRow(row)) {
+        @for (row of rows; track trackRow(row)) {
           @if (row.kind === 'group') {
             <div
               class="dropdown-group"
               [class.is-disabled]="row.disabled"
-              role="presentation"
+              role="group"
+              [attr.aria-label]="row.label"
             >
               {{ row.label }}
             </div>
-          }
-
-          @if (row.kind === 'option') {
+          } @else {
             @let item = row.item;
             @let isSelected = selectedValuesSet().has(item.value);
 
@@ -83,7 +89,11 @@
 
               @if (isSelected) {
                 <span class="dropdown-option__check">
-                  <svg class="dropdown-icon dropdown-icon--check" viewBox="0 0 24 24" aria-hidden="true">
+                  <svg
+                    class="dropdown-icon dropdown-icon--check"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
                     <path d="M9 16.2l-3.5-3.5L4 14.2l5 5 11-11-1.5-1.4z" />
                   </svg>
                 </span>
@@ -95,4 +105,3 @@
     </div>
   </ng-template>
 </div>
-

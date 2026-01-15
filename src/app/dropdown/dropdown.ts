@@ -1,4 +1,4 @@
-import { afterRenderEffect, ChangeDetectionStrategy, Component, computed, ElementRef, EventEmitter, Input, Output, signal, viewChild, viewChildren } from '@angular/core';
+import { afterRenderEffect, ChangeDetectionStrategy, Component, computed, effect, ElementRef, input, output, signal, viewChild, viewChildren } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { OverlayModule } from '@angular/cdk/overlay';
 
@@ -16,6 +16,8 @@ export type DropdownItem = {
   disabled?: boolean;
 }
 
+type GroupableItem = DropdownItem & { district: string };
+
 type RenderRow = 
   | { kind: 'group'; key: string; label: string; disabled: boolean }
   | { kind: 'option'; item: DropdownItem; disabled: boolean; groupKey: string | null };
@@ -28,34 +30,45 @@ type RenderRow =
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class Dropdown {
-  @Input() items: DropdownItem[] = [];
-  @Input() placeholder = 'Выберите элемент';
-  @Input() mode: DropdownMode = 'single';
-  @Input() groups: DropdownGroup[] = [];
-  @Input() groupBy?: (item: DropdownItem) => string | null;
-  @Input() searchable = false;
+  readonly items = input<DropdownItem[]>([]);
+  readonly placeholder = input<string>('Выберите элемент');
+  readonly mode = input<DropdownMode>('single');
 
-  /** 
-   * Single-select: эмитим [value] или []
-   * Multi-select: эмитим [value1, value2...]
-   * */
-  @Output() readonly change = new EventEmitter<string[]>();
+  readonly groups = input<DropdownGroup[]>([]);
+  readonly groupBy = input<((item: GroupableItem) => string | null) | undefined>(undefined);
 
-  /** Ссылки на элементы списка — нужны только для scrollIntoView при открытии. */
+  readonly searchable = input(false);
+  readonly value = input<string[]>([]);
+  
+  readonly change = output<string[]>();
+
+  /** Ссылки на элементы списка — нужны только для scrollIntoView при открытии */
   readonly optionEls = viewChildren<ElementRef<HTMLElement>>('optionEl');
+
+  /** Инпут поиска — фокусируем при открытии */
   readonly searchInputEl = viewChild<ElementRef<HTMLInputElement>>('searchInput');
 
+  /** Генерируем уникальный id для aria-controls (a11y) */
+  readonly panelId = `dropdown-panel-${crypto.randomUUID?.() ?? Math.random().toString(16).slice(2)}`;
+
   readonly isOpen = signal(false);
+
   readonly selectedValue = signal<string | null>(null);
   readonly selectedSet = signal<Set<string>>(new Set<string>());
+
   readonly searchQuery = signal('');
 
-  readonly isMulti = computed(() => this.mode === 'multi');
+  /** Флаг: скроллим до выбранного элемента один раз при открытии */
+  private readonly shouldScrollToSelected = signal(false);
+
+  readonly isMulti = computed(() => this.mode() === 'multi');
   
   readonly selectedValues = computed<string[]>(() => {
+    const items = this.items();
+
     if (this.isMulti()) {
       const set = this.selectedSet();
-      return this.items.filter(i => set.has(i.value)).map(i => i.value);
+      return items.filter(i => set.has(i.value)).map(i => i.value);
     }
 
     const v = this.selectedValue();
@@ -64,29 +77,19 @@ export class Dropdown {
 
   readonly selectedValuesSet = computed(() => new Set(this.selectedValues()));
 
-  readonly selectedItems = computed<DropdownItem[]>(() => {
-    const values = new Set(this.selectedValues());
-    return this.items.filter(i => values.has(i.value));
+  readonly selectedItems = computed(() => {
+    const selected = this.selectedValuesSet();
+    return this.items().filter(i => selected.has(i.value));
   });
-
-  readonly normalizedQuery = computed(() => this.searchQuery().trim().toLowerCase());
-
-  readonly filteredItems = computed<DropdownItem[]>(() => {
-    const q = this.normalizedQuery();
-    const items = this.items ?? [];
-
-    if (!this.searchable || !q) return items;
-
-    return items.filter(i => i.label.toLowerCase().includes(q));
-  });
-
 
   readonly displayValue = computed(() => {
     const selected = this.selectedItems();
-    if (!selected.length) return this.placeholder;
+    const placeholder = this.placeholder();
+
+    if (!selected.length) return placeholder;
 
     if (!this.isMulti()) {
-      return selected[0]?.label ?? this.placeholder;
+      return selected[0]?.label ?? placeholder;
     }
 
     if (selected.length <= 2) {
@@ -95,18 +98,42 @@ export class Dropdown {
     return `${selected[0].label}, ${selected[1].label} и еще ${selected.length - 2}`;
   });
 
+  /** 
+   * Поиск
+   **/ 
+
+  readonly normalizedQuery = computed(() => this.searchQuery().trim().toLowerCase());
+
+  readonly filteredItems = computed<DropdownItem[]>(() => {
+    const q = this.normalizedQuery();
+    const items = this.items();
+
+    if (!this.searchable() || !q) return items;
+
+    return items.filter(i => i.label.toLowerCase().includes(q));
+  });
+
+  /** 
+   * Группы
+   **/ 
+
   readonly groupsMap = computed(() => {
     const map = new Map<string, DropdownGroup>();
-    for (const g of this.groups) map.set(g.key, g);
+    for (const g of this.groups()) map.set(g.key, g);
     return map;
   });
 
+  /** Преобразует items в плоский список строк для рендера:
+   * учитывает поиск и группировку
+   * сохраняет контролируемый порядок групп
+   * применяет disabled-состояние группы к её элементам
+   **/
   readonly renderRows = computed<RenderRow[]>(() => {
-    const items = this.filteredItems();
-    const groupBy = this.groupBy;
+    const groupBy = this.groupBy();
+    const visibleItems = this.filteredItems();
 
     if (!groupBy) {
-      return items.map(item => ({
+      return visibleItems.map(item => ({
         kind: 'option',
         item,
         disabled: !!item.disabled,
@@ -114,26 +141,26 @@ export class Dropdown {
       }));
     }
 
-    const grouped = new Map<string, DropdownItem[]>();
+    // В режиме группировки items содержат поле district, которое нужно для groupBy
+    const sourceItems = visibleItems as GroupableItem[];
 
-    for (const item of items) {
+    const grouped = new Map<string, GroupableItem[]>();
+
+    for (const item of sourceItems) {
       const key = groupBy(item);
       if (!key) continue;
 
       const arr = grouped.get(key);
-      if (arr) {
-        arr.push(item);
-      } else {
-        grouped.set(key, [item]);
-      }
+      if (arr) arr.push(item);
+      else grouped.set(key, [item]);
     }
 
     const groupsMap = this.groupsMap();
+    const groups = this.groups();
+
     const rows: RenderRow[] = [];
 
-    const orderedKeys = (this.groups ?? [])
-      .map(g => g.key)
-      .filter(key => grouped.has(key));
+    const orderedKeys = groups.map(g => g.key).filter(key => grouped.has(key));
 
     const extraKeys: string[] = [];
     for (const key of grouped.keys()) {
@@ -143,8 +170,9 @@ export class Dropdown {
     const allKeys = [...orderedKeys, ...extraKeys];
 
     for (const key of allKeys) {
-      const groupItems = grouped.get(key);
-      if (!groupItems?.length) continue;
+      const itemsInGroup = grouped.get(key);
+      if (!itemsInGroup?.length) continue;
+
       const group = groupsMap.get(key);
       const groupDisabled = !!group?.disabled;
 
@@ -155,7 +183,7 @@ export class Dropdown {
         disabled: groupDisabled,
       });
 
-      for (const item of groupItems) {
+      for (const item of itemsInGroup) {
         rows.push({
           kind: 'option',
           item,
@@ -168,14 +196,19 @@ export class Dropdown {
     return rows;
   });
 
-  trackRow(row: RenderRow): string {
-    return row.kind === 'group' ? `g:${row.key}` : `o:${row.item.value}`;
-  }
-
-  /** Флаг: скроллим до выбранного элемента один раз при открытии. */
-  private readonly shouldScrollToSelected = signal(false);
-
   constructor() {
+    effect(() => {
+      const v = this.value() ?? [];
+
+      if (this.isMulti()) {
+        this.selectedSet.set(new Set(v));
+        this.selectedValue.set(null);
+      } else {
+        this.selectedValue.set(v[0] ?? null);
+        this.selectedSet.set(new Set());
+      }
+    });
+
     afterRenderEffect(() => {
       if (!this.isOpen() || !this.shouldScrollToSelected()) return;
 
@@ -197,7 +230,7 @@ export class Dropdown {
     });
 
     afterRenderEffect(() => {
-      if (!this.isOpen() || !this.searchable) return;
+      if (!this.isOpen() || !this.searchable()) return;
 
       const input = this.searchInputEl();
       input?.nativeElement.focus();
@@ -208,6 +241,9 @@ export class Dropdown {
     this.searchQuery.set(value);
   }
 
+  trackRow(row: RenderRow): string {
+    return row.kind === 'group' ? `g:${row.key}` : `o:${row.item.value}`;
+  }
 
   toggle(): void {
     const willOpen = !this.isOpen();
@@ -243,7 +279,6 @@ export class Dropdown {
       return;
     }
 
-    // Single-select: повторный клик по выбранному снимает выбор
     const isAlreadySelected = this.selectedValue() === item.value;
     this.selectedValue.set(isAlreadySelected ? null : item.value);
 
