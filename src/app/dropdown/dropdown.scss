@@ -58,6 +58,31 @@
     }
   }
 
+  &-search {
+    padding: 8px;
+    border-bottom: 1px solid #eee;
+    background: #fff;
+
+    &__input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 8px 10px;
+      border: 1px solid #ccc;
+      outline: none;
+      border-radius: 0;
+
+      &:focus {
+        border-color: #999;
+        box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.08);
+      }
+    }
+  }
+
+  &-empty {
+    padding: 10px 12px;
+    color: #666;
+  }
+
   &-group {
     padding: 8px 12px;
     font-size: 12px;

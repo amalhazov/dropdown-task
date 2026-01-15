@@ -10,7 +10,6 @@
     [attr.aria-expanded]="isOpen()"
     [attr.aria-controls]="'dropdown-panel'"
     (click)="toggle()"
-    (keydown)="onTriggerKeydown($event)"
   >
     <span class="dropdown-trigger__text">{{ displayValue() }}</span>
     <span
@@ -38,43 +37,59 @@
     (backdropClick)="close()"
   >
     <div id="dropdown-panel" class="dropdown-panel" role="listbox">
-      @for (row of renderRows(); track trackRow(row)) {
+      @if (searchable) {
+        <div class="dropdown-search">
+          <input
+            #searchInput
+            class="dropdown-search__input"
+            type="text"
+            placeholder="Поиск..."
+            [value]="searchQuery()"
+            (input)="onSearchInput(searchInput.value)"
+          />
+        </div>
+      }
 
-        @if (row.kind === 'group') {
-          <div
-            class="dropdown-group"
-            [class.is-disabled]="row.disabled"
-            role="presentation"
-          >
-            {{ row.label }}
-          </div>
-        }
+      @if (renderRows().length === 0) {
+        <div class="dropdown-empty">Ничего не найдено</div>
+      } @else {
+        @for (row of renderRows(); track trackRow(row)) {
+          @if (row.kind === 'group') {
+            <div
+              class="dropdown-group"
+              [class.is-disabled]="row.disabled"
+              role="presentation"
+            >
+              {{ row.label }}
+            </div>
+          }
 
-        @if (row.kind === 'option') {
-          @let item = row.item;
-          @let isSelected = selectedValuesSet().has(item.value);
+          @if (row.kind === 'option') {
+            @let item = row.item;
+            @let isSelected = selectedValuesSet().has(item.value);
 
-          <button
-            #optionEl
-            type="button"
-            class="dropdown-option"
-            role="option"
-            [class.is-selected]="isSelected"
-            [attr.aria-selected]="isSelected"
-            [attr.data-value]="item.value"
-            [disabled]="row.disabled"
-            (click)="select(row)"
-          >
-            <span class="dropdown-option__text">{{ item.label }}</span>
+            <button
+              #optionEl
+              type="button"
+              class="dropdown-option"
+              role="option"
+              [class.is-selected]="isSelected"
+              [attr.aria-selected]="isSelected"
+              [attr.data-value]="item.value"
+              [disabled]="row.disabled"
+              (click)="select(row)"
+            >
+              <span class="dropdown-option__text">{{ item.label }}</span>
 
-            @if (isSelected) {
-              <span class="dropdown-option__check">
-                <svg class="dropdown-icon dropdown-icon--check" viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M9 16.2l-3.5-3.5L4 14.2l5 5 11-11-1.5-1.4z" />
-                </svg>
-              </span>
-            }
-          </button>
+              @if (isSelected) {
+                <span class="dropdown-option__check">
+                  <svg class="dropdown-icon dropdown-icon--check" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M9 16.2l-3.5-3.5L4 14.2l5 5 11-11-1.5-1.4z" />
+                  </svg>
+                </span>
+              }
+            </button>
+          }
         }
       }
     </div>

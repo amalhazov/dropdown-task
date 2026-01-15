@@ -1,4 +1,4 @@
-import { afterRenderEffect, ChangeDetectionStrategy, Component, computed, ElementRef, EventEmitter, Input, Output, signal, viewChildren } from '@angular/core';
+import { afterRenderEffect, ChangeDetectionStrategy, Component, computed, ElementRef, EventEmitter, Input, Output, signal, viewChild, viewChildren } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { OverlayModule } from '@angular/cdk/overlay';
 
@@ -33,6 +33,7 @@ export class Dropdown {
   @Input() mode: DropdownMode = 'single';
   @Input() groups: DropdownGroup[] = [];
   @Input() groupBy?: (item: DropdownItem) => string | null;
+  @Input() searchable = false;
 
   /** 
    * Single-select: эмитим [value] или []
@@ -42,13 +43,15 @@ export class Dropdown {
 
   /** Ссылки на элементы списка — нужны только для scrollIntoView при открытии. */
   readonly optionEls = viewChildren<ElementRef<HTMLElement>>('optionEl');
+  readonly searchInputEl = viewChild<ElementRef<HTMLInputElement>>('searchInput');
 
   readonly isOpen = signal(false);
   readonly selectedValue = signal<string | null>(null);
   readonly selectedSet = signal<Set<string>>(new Set<string>());
+  readonly searchQuery = signal('');
 
   readonly isMulti = computed(() => this.mode === 'multi');
-
+  
   readonly selectedValues = computed<string[]>(() => {
     if (this.isMulti()) {
       const set = this.selectedSet();
@@ -65,6 +68,18 @@ export class Dropdown {
     const values = new Set(this.selectedValues());
     return this.items.filter(i => values.has(i.value));
   });
+
+  readonly normalizedQuery = computed(() => this.searchQuery().trim().toLowerCase());
+
+  readonly filteredItems = computed<DropdownItem[]>(() => {
+    const q = this.normalizedQuery();
+    const items = this.items ?? [];
+
+    if (!this.searchable || !q) return items;
+
+    return items.filter(i => i.label.toLowerCase().includes(q));
+  });
+
 
   readonly displayValue = computed(() => {
     const selected = this.selectedItems();
@@ -87,10 +102,9 @@ export class Dropdown {
   });
 
   readonly renderRows = computed<RenderRow[]>(() => {
-    const items = this.items ?? [];
+    const items = this.filteredItems();
     const groupBy = this.groupBy;
 
-    // Без группировки — ведем себя как раньше, просто список опций
     if (!groupBy) {
       return items.map(item => ({
         kind: 'option',
@@ -117,12 +131,10 @@ export class Dropdown {
     const groupsMap = this.groupsMap();
     const rows: RenderRow[] = [];
 
-    // 1) Сначала ключи из groups — чтобы порядок был контролируемый
     const orderedKeys = (this.groups ?? [])
       .map(g => g.key)
       .filter(key => grouped.has(key));
 
-    // 2) Потом “лишние” ключи, которых нет в groups (на всякий случай)
     const extraKeys: string[] = [];
     for (const key of grouped.keys()) {
       if (!groupsMap.has(key)) extraKeys.push(key);
@@ -132,14 +144,10 @@ export class Dropdown {
 
     for (const key of allKeys) {
       const groupItems = grouped.get(key);
-      if (!groupItems?.length) continue; // группа показывается только если есть элементы
-
+      if (!groupItems?.length) continue;
       const group = groupsMap.get(key);
-
-      // ✅ ВОТ ТУТ мы “дизейблим всю группу”
       const groupDisabled = !!group?.disabled;
 
-      // header группы (не выбираемый)
       rows.push({
         kind: 'group',
         key,
@@ -147,16 +155,11 @@ export class Dropdown {
         disabled: groupDisabled,
       });
 
-      // элементы группы (все disabled, если disabled группа)
       for (const item of groupItems) {
         rows.push({
           kind: 'option',
           item,
-
-          // ✅ ВОТ ЭТА СТРОКА — главное исправление по ТЗ:
-          // если disabled группа — все её элементы disabled
           disabled: groupDisabled || !!item.disabled,
-
           groupKey: key,
         });
       }
@@ -173,12 +176,9 @@ export class Dropdown {
   private readonly shouldScrollToSelected = signal(false);
 
   constructor() {
-    // Реализуем скролл до выбранного элемента если он есть
     afterRenderEffect(() => {
       if (!this.isOpen() || !this.shouldScrollToSelected()) return;
 
-      // для single — скроллим к выбранному
-      // для multi — можно скроллить к первому выбранному (минимальный вариант)
       const values = this.selectedValues();
       const first = values[0];
 
@@ -188,16 +188,26 @@ export class Dropdown {
       }
 
       const options = this.optionEls();
-      if (!options.length) {
-        return;
-      }
+      if (!options.length) return;
 
       const el = options.find(ref => ref.nativeElement.getAttribute('data-value') === first);
       el?.nativeElement.scrollIntoView({ block: 'nearest' });
 
       this.shouldScrollToSelected.set(false);
     });
+
+    afterRenderEffect(() => {
+      if (!this.isOpen() || !this.searchable) return;
+
+      const input = this.searchInputEl();
+      input?.nativeElement.focus();
+    });
   }
+
+  onSearchInput(value: string): void {
+    this.searchQuery.set(value);
+  }
+
 
   toggle(): void {
     const willOpen = !this.isOpen();
@@ -211,6 +221,7 @@ export class Dropdown {
   close(): void {
     this.isOpen.set(false);
     this.shouldScrollToSelected.set(false);
+    this.searchQuery.set('');
   }
 
   select(row: { kind: 'option'; item: DropdownItem; disabled: boolean }): void {
@@ -238,18 +249,5 @@ export class Dropdown {
 
     this.change.emit(this.selectedValues());
     this.close();
-  }
-
-  // Реализуем поддержку клавиатуры
-  onTriggerKeydown(event: KeyboardEvent): void {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      this.toggle();
-    }
-
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      this.close();
-    }
   }
 }
