@@ -1,4 +1,16 @@
-import { afterRenderEffect, ChangeDetectionStrategy, Component, computed, effect, ElementRef, input, output, signal, viewChild, viewChildren } from '@angular/core';
+import {
+  afterRenderEffect,
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  ElementRef,
+  input,
+  output,
+  signal,
+  viewChild,
+  viewChildren,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { OverlayModule } from '@angular/cdk/overlay';
 
@@ -8,17 +20,17 @@ export type DropdownGroup = {
   key: string;
   label: string;
   disabled?: boolean;
-}
+};
 
 export type DropdownItem = {
   label: string;
   value: string;
   disabled?: boolean;
-}
+};
 
 type GroupableItem = DropdownItem & { district: string };
 
-type RenderRow = 
+type RenderRow =
   | { kind: 'group'; key: string; label: string; disabled: boolean }
   | { kind: 'option'; item: DropdownItem; disabled: boolean; groupKey: string | null };
 
@@ -39,7 +51,7 @@ export class Dropdown {
 
   readonly searchable = input(false);
   readonly value = input<string[]>([]);
-  
+
   readonly change = output<string[]>();
 
   /** Ссылки на элементы списка — нужны только для scrollIntoView при открытии */
@@ -62,13 +74,13 @@ export class Dropdown {
   private readonly shouldScrollToSelected = signal(false);
 
   readonly isMulti = computed(() => this.mode() === 'multi');
-  
+
   readonly selectedValues = computed<string[]>(() => {
     const items = this.items();
 
     if (this.isMulti()) {
       const set = this.selectedSet();
-      return items.filter(i => set.has(i.value)).map(i => i.value);
+      return items.filter((i) => set.has(i.value)).map((i) => i.value);
     }
 
     const v = this.selectedValue();
@@ -79,7 +91,7 @@ export class Dropdown {
 
   readonly selectedItems = computed(() => {
     const selected = this.selectedValuesSet();
-    return this.items().filter(i => selected.has(i.value));
+    return this.items().filter((i) => selected.has(i.value));
   });
 
   readonly displayValue = computed(() => {
@@ -93,14 +105,14 @@ export class Dropdown {
     }
 
     if (selected.length <= 2) {
-      return selected.map(i => i.label).join(', ');
+      return selected.map((i) => i.label).join(', ');
     }
     return `${selected[0].label}, ${selected[1].label} и еще ${selected.length - 2}`;
   });
 
-  /** 
+  /**
    * Поиск
-   **/ 
+   **/
 
   readonly normalizedQuery = computed(() => this.searchQuery().trim().toLowerCase());
 
@@ -110,12 +122,12 @@ export class Dropdown {
 
     if (!this.searchable() || !q) return items;
 
-    return items.filter(i => i.label.toLowerCase().includes(q));
+    return items.filter((i) => i.label.toLowerCase().includes(q));
   });
 
-  /** 
+  /**
    * Группы
-   **/ 
+   **/
 
   readonly groupsMap = computed(() => {
     const map = new Map<string, DropdownGroup>();
@@ -133,7 +145,7 @@ export class Dropdown {
     const visibleItems = this.filteredItems();
 
     if (!groupBy) {
-      return visibleItems.map(item => ({
+      return visibleItems.map((item) => ({
         kind: 'option',
         item,
         disabled: !!item.disabled,
@@ -160,7 +172,7 @@ export class Dropdown {
 
     const rows: RenderRow[] = [];
 
-    const orderedKeys = groups.map(g => g.key).filter(key => grouped.has(key));
+    const orderedKeys = groups.map((g) => g.key).filter((key) => grouped.has(key));
 
     const extraKeys: string[] = [];
     for (const key of grouped.keys()) {
@@ -223,7 +235,7 @@ export class Dropdown {
       const options = this.optionEls();
       if (!options.length) return;
 
-      const el = options.find(ref => ref.nativeElement.getAttribute('data-value') === first);
+      const el = options.find((ref) => ref.nativeElement.getAttribute('data-value') === first);
       el?.nativeElement.scrollIntoView({ block: 'nearest' });
 
       this.shouldScrollToSelected.set(false);

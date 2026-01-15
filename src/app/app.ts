@@ -25,7 +25,7 @@ export class App {
   readonly areaItems: Area[] = areas;
 
   // По умолчанию выбраны все округа
-  readonly selectedDistricts = signal<string[]>(districts.map(d => d.value));
+  readonly selectedDistricts = signal<string[]>(districts.map((d) => d.value));
   readonly selectedAreas = signal<string[]>([]);
 
   // Map для получения районов только из выбранных округов
@@ -39,7 +39,7 @@ export class App {
   readonly groupsForAreas = computed(() => {
     const selected = new Set(this.selectedDistricts());
 
-    return districts.map(d => ({
+    return districts.map((d) => ({
       key: d.value,
       label: d.label,
       disabled: !selected.has(d.value),
@@ -49,7 +49,7 @@ export class App {
   // "Обертка" для вывода объектов в json pipe целиком, а не только value
   readonly selectedAreaObjects = computed(() => {
     const selected = new Set(this.selectedAreas());
-    return this.areaItems.filter(a => selected.has(a.value));
+    return this.areaItems.filter((a) => selected.has(a.value));
   });
 
   // Группируем районы по округам (для dropdown компонента)
@@ -62,7 +62,7 @@ export class App {
       const districtByValue = this.areaDistrictByValue();
 
       const prev = this.selectedAreas();
-      const next = prev.filter(v => allowed.has(districtByValue.get(v) ?? ''));
+      const next = prev.filter((v) => allowed.has(districtByValue.get(v) ?? ''));
 
       if (next.length !== prev.length) {
         this.selectedAreas.set(next);
